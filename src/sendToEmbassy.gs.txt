@@ -1,4 +1,4 @@
-const OPENAI_API_KEY ='API KEY'; // Replace with your GPT-4o API Key 
+const OPENAI_API_KEY ='OPENAI_API_KEY'; // Replace with your GPT-4o API Key 
 
 const EMAIL_CC = ['gnikki.utube@gmail.com'];                           // Optional CCs
 
