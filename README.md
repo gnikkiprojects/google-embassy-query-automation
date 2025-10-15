@@ -81,6 +81,7 @@ google-embassy-query-automation/
 
 ## 🖼️ Workflow Diagram
 
+```markdown
 ```mermaid
 flowchart TD
   A[Community Member Submits Google Form] --> B[Response stored in Google Sheet]
@@ -90,10 +91,7 @@ flowchart TD
   E --> F[Embassy Inbox (Abu Dhabi / Dubai)]
   C --> G[Log case details in Sheet]
 ```
-
-*(You can also replace this with a PNG diagram under `/docs`)*
-
----
+```
 
 ## 🧠 Key Functional Modules
 
