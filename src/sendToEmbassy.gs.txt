@@ -1,0 +1,413 @@
+const OPENAI_API_KEY ='API KEY'; // Replace with your GPT-4o API Key 
+
+const EMAIL_CC = ['gnikki.utube@gmail.com'];                           // Optional CCs
+
+const EMAIL_ABU_DHABI = 'gnikki.reddy@gmail.com'; // Replace with official Abu Dhabi Embassy email
+const EMAIL_DUBAI = 'gnikki.utube@gmail.com'; // Replace with official Dubai Consulate email
+
+
+const CASE_FIELD_MAP = {
+  "Death": {
+    "Is the body identified?": 12,
+    "Location of death (if known)": 13,
+    "Hospital name (if applicable)": 14,
+    "Point of contact next to kin name and phone number": 15,
+    //"Upload Death Certificate": 16,
+    "Unidentified body gender": 74
+    //"Upload Photo of the unidentified individual body": 75
+  },
+  "Missing Person": {
+    "Last seen location": 17,
+    "Have you filed a police complaint?": 18,
+    "Travel history (if any)": 19,
+    "Do you have employer details?": 20
+  },
+  "Absconding": {
+    "Do you have employer details?": 21,
+    "Does the individual have a valid visa?": 22,
+    "Visa expiry date (if known)": 23,
+    "Estimated overstay days": 24,
+    "Last seen location (if any)": 25
+  },
+  "Employer Harassment / Abuse": {
+    "Type of abuse": 26,
+    "Have documents been withheld?": 27,
+    //"Upload an offer letter or labor contract (if any)": 28,
+    "Do you have employer details?": 29
+  },
+  "Overstay / Illegal Status": {
+    "Visa expiry date": 30,
+    "Reason for overstay": 31,
+    "Intent to exit or legalize?": 32
+  },
+  "Hospitalized / Medical Emergency": {
+    "Hospital name": 33,
+    "Date of admission": 34,
+    "Diagnosis/Condition": 35,
+    "Point of contact number next to kin": 36,
+    //"Upload Medical Report (if any)": 37,
+    "Do you have employer details?": 38,
+    "Do the person have valid insurance?": 90
+  },
+  "Police Case / Detention": {
+    "Police station name": 39,
+    "Charges (if known)": 40,
+    "Date of arrest": 41,
+    "Legal representative or lawyer name (if any)": 42,
+    "Case number (if known)": 43,
+    "Do you have employer details?": 44
+  },
+  "Visa Fraud / Fake Agent": {
+    "Amount paid": 45,
+    "Police complaint filed?": 46
+    //"Upload any documents for proof (if any)": 47
+  },
+  "Unpaid Salary / Labor Exploitation": {
+    "Do you have employer details?": 48,
+    "Amount due": 49,
+    "Have you filed a complaint with MOL?": 50
+   // "Upload pay slips or contract (if any)": 51
+  },
+  "Stranded Without Support": {
+    "Current location": 52,
+    "How long stranded?": 53
+  },
+  "Request for Exit / Amnesty Case": {
+    "Current visa status": 54,
+    "Overstay fine details (if known)": 55,
+    "Willing to leave voluntarily?": 56,
+    "Do you have employer details?": 57
+    //"Upload letter of intent": 58
+  },
+  "Child Welfare / Abandonment": {
+    "Child’s age": 59,
+    "School or home location": 60,
+    "Guardian or caretaker information": 61,
+    "Is consulate coordination needed?": 62
+  },
+  "Documents Withheld by Employer": {
+    "Do you have employer details?": 63,
+    "Documents being withheld?": 64,
+    "What are the documents witheld?": 91
+  },
+  "Repatriation of Dead Body": {
+    "Documents available?": 65,
+    "Relation to deceased": 66,
+    "Coordination with embassy started?": 67
+    //"Upload death certificate": 68
+  },
+  "Job Scam / Absconded Agents": {
+    "Mode of Agent approached": 69,
+    "Do you have employer / scammer details?": 70,
+    "How much was paid?": 72
+    //"Proof of scam": 73
+  }
+};
+
+function onFormSubmit(e) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Form Responses 1");
+  const row = e.range.getRow();
+  const values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const reportTo = values[89] || 'Abu Dhabi';
+
+
+  const dateOfIncident = values[1];
+  const caseType = values[2];
+  const rawDescription = values[3];
+  const name = values[4];
+  const passport = values[5];
+  const eid = values[6] || 'Not Available';
+  const phone = values[9];
+  const contactName = values[15];
+  const reporter = values[81];
+  const reporterPassport = values[82];
+  const reporterPhone = values[83];
+  const reporterEmail = values[84];
+  const gender = values[86];
+  const age = values[87];
+  const missingDesc = values[88];
+
+  const companyName = values[76];
+  const companyPhone = values[77];
+  const companyEmail = values[78];
+  const companyLocation = values[79];
+  const visaIssuedUnderCompany = values[80];
+
+  const caseId = generateFormattedCaseId(caseType);
+  const polished = polishDescription(rawDescription, name, passport, eid, phone, reporter, reporterPhone, caseType, gender, age, missingDesc, values);
+
+  const attachmentColumnMap = {
+    7: "Passport Copy",
+    8: "EID Copy",
+    16: "Supporting Documents",
+    28: "Offer Letter / Labor Contract",
+    37: "Medical Report",
+    47: "Proof Document",
+    51: "Pay Slips / Contract",
+    58: "Letter of Intent",
+    68: "Death Certificate (BR)",
+    71: "Job Offer Letter",
+    73: "Proof of Scam",
+    75: "Photo of Unidentified Body",
+    93: "Other Supporting Documents 1",
+    94: "Other Supporting Documents 2",
+    95: "Other Supporting Documents 3",
+    96: "Other Supporting Documents 4",
+    97: "Other Supporting Documents 5"
+  };
+
+  const attachments = [];
+  const attachedFilesList = [];
+  Object.entries(attachmentColumnMap).forEach(([index, label]) => {
+    const link = values[Number(index)];
+    const blob = getFileBlobFromDriveLink(link);
+    if (blob) {
+      attachments.push(blob);
+      attachedFilesList.push(`<a href="${link}" target="_blank">${label}</a>`);
+    }
+  });
+
+  let emailTo = EMAIL_ABU_DHABI;
+  let ccEmails = [];
+
+  if (typeof reporterEmail === 'string' && reporterEmail.includes("@")) {
+    ccEmails.push(reporterEmail);
+  }
+
+  // Dynamic email routing
+  if (reportTo === 'Other emirates') {
+    emailTo = EMAIL_DUBAI;
+    ccEmails.push(EMAIL_ABU_DHABI); // CC Abu Dhabi if sending to Dubai
+  } else {
+    emailTo = EMAIL_ABU_DHABI; // Only to Abu Dhabi, no need to CC Dubai
+  }
+
+  if (EMAIL_CC.length > 0) ccEmails = ccEmails.concat(EMAIL_CC);
+
+
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+      <p>Dear <strong>Sir/Madam</strong>,</p>
+      <p>We are reporting the following case submitted by our local community volunteer:</p>
+
+      <p><strong>Submitted On:</strong> ${values[0]}</p>
+
+      <h3>Affected Individual</h3>
+      <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse; width: 100%; font-size: 13px;">
+        <tr><td><strong>Date of Incident</strong></td><td>${dateOfIncident}</td></tr>
+        <tr><td><strong>Case Type</strong></td><td>${caseType}</td></tr>
+        <tr><td><strong>Name</strong></td><td>${name || 'Not Available'}</td></tr>
+        <tr><td><strong>Gender</strong></td><td>${gender || 'Not Provided'}</td></tr>
+        <tr><td><strong>Age</strong></td><td>${age || 'Not Provided'}</td></tr>
+        <tr><td><strong>Passport Number</strong></td><td>${passport || 'Not Available'}</td></tr>
+        <tr><td><strong>Emirates ID</strong></td><td>${eid || 'Not Available'}</td></tr>
+        <tr><td><strong>Phone</strong></td><td>${phone || 'Not Available'}</td></tr>
+      </table>
+
+      ${buildAdditionalDetailsSection(caseType, values)}
+
+      ${(companyName || companyPhone || companyEmail || companyLocation || visaIssuedUnderCompany) ? `
+        <h3 style="margin-top: 20px;">Company / Agent Details</h3>
+        <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse; width: 100%; font-size: 13px;">
+          ${companyName ? `<tr><td><strong>Company / Agent Name</strong></td><td>${companyName || 'Not Available'}</td></tr>` : ''}
+          ${companyPhone ? `<tr><td><strong>Company Phone</strong></td><td>${companyPhone || 'Not Available'}</td></tr>` : ''}
+          ${companyEmail ? `<tr><td><strong>Company Email</strong></td><td>${companyEmail || 'Not Available'}</td></tr>` : ''}
+          ${companyLocation ? `<tr><td><strong>Company Location</strong></td><td>${companyLocation || 'Not Available'}</td></tr>` : ''}
+          ${visaIssuedUnderCompany ? `<tr><td><strong>Visa Issued Under Company</strong></td><td>${visaIssuedUnderCompany}</td></tr>` : ''}
+        </table>
+      ` : ''}
+
+      <h3 style="margin-top: 20px;">Reported By</h3>
+      <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse; width: 100%; font-size: 13px;">
+        <tr><td><strong>Name</strong></td><td>${reporter}</td></tr>
+        <tr><td><strong>Passport Number</strong></td><td>${reporterPassport || 'Not Available'}</td></tr>
+        <tr><td><strong>Phone</strong></td><td>${reporterPhone || 'Not Available'}</td></tr>
+        <tr><td><strong>Email</strong></td><td>${reporterEmail || 'Not Provided'}</td></tr>
+      </table>
+
+      <p style="margin-top: 20px;"><strong>Case Summary:</strong></p>
+      <div style="background-color: #f9f9f9; padding: 10px; border-left: 3px solid #007BFF;">
+        ${polished.replace(/\n/g, "<br>")}
+      </div>
+
+      ${attachedFilesList.length > 0 ? `
+        <p style="margin-top: 20px;"><strong>Attachments:</strong></p>
+        <ul>${attachedFilesList.map(f => `<li>${f}</li>`).join('')}</ul>
+      ` : ''}
+
+      <p style="margin-top: 30px;">
+        Kind regards,<br>
+        Raja Srinivas Rao<br>
+        Telangana Friends Association – President<br>
+        Phone: +971 551058482
+      </p>
+
+      <p style="font-size: 12px; color: gray;">
+        Note: This case has been reported in good faith by a verified local community representative of Telangana Friends Association. All attachments are provided as received.
+      </p>
+    </div>
+  `;
+
+  GmailApp.sendEmail(emailTo, `${caseId}: ${caseType} - ${name}`, '', {
+    cc: ccEmails.join(','),
+    htmlBody: htmlBody,
+    noReply: true,
+    attachments: attachments
+  });
+
+
+  sheet.getRange(row, 99).setValue(caseId);
+  sheet.getRange(row, 100).setValue(polished);
+  sheet.getRange(row, 101).setValue("Yes");
+  sheet.getRange(row, 102).setValue(new Date());
+}
+
+function getRelevantCaseDetailsText(caseType, values) {
+  const fields = CASE_FIELD_MAP[caseType];
+  if (!fields) return '';
+  const details = [];
+
+  for (const [label, index] of Object.entries(fields)) {
+    const value = values[index];
+    if (value && value !== 'Not Provided') {
+      details.push(`${label}: ${value}`);
+    }
+  }
+
+  return details.length ? `\n\nAdditional Relevant Case Information:\n${details.join('\n')}` : '';
+}
+
+function polishDescription(description, name, passport, eid, phone, reporter, reporterPhone, typeOfCase, gender, age, missingDesc, values) {
+  const extraDetails = getRelevantCaseDetailsText(typeOfCase, values);
+
+  const prompt = `Rewrite the following case summary in formal, diplomatic English for an official email to the Indian Embassy.
+
+Begin with: "Dear Sir/Madam".  
+Do not list raw fields or label headers. Instead, craft a strong, concise narrative using all provided information.
+
+• Clearly describe the situation with respect to the affected individual.  
+• Mention personal identifiers like passport, EID, phone, age, gender — but only if they help contextualize the case.  
+• If uploads are mentioned, say “supporting documents are attached” — do not include hyperlinks or file names.  
+• Emphasize the urgency or hardship where relevant.  
+• End the email with the reporter’s name and contact number — do not include the affected individual’s identifiers in the closing.
+use the below additional information to strengthing the case:
+
+Affected Individual:
+- Name: ${name}
+- Passport: ${passport}
+- EID: ${eid}
+- Phone: ${phone || 'Not Provided'}
+- Gender: ${gender || 'Not Provided'}
+- Age: ${age || 'Not Provided'}
+${typeOfCase.toLowerCase() === 'missing person' ? `- Additional Info: ${missingDesc || 'Not Provided'}` : ''}
+
+Case Type: ${typeOfCase}
+
+Description:
+"""
+${description}
+"""${extraDetails}
+
+Close with reporter name (${reporter}) and phone (${reporterPhone}).`;
+
+  const payload = {
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.7
+  };
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+    payload: JSON.stringify(payload)
+  };
+
+  try {
+    const response = UrlFetchApp.fetch("https://api.openai.com/v1/chat/completions", options);
+    const result = JSON.parse(response.getContentText());
+    return result.choices[0].message.content.trim();
+  } catch (err) {
+    Logger.log("OpenAI Error: " + err);
+    return "[Unable to polish description. Please review manually.]";
+  }
+}
+
+
+function getFileBlobFromDriveLink(driveUrl) {
+  try {
+    if (!driveUrl || typeof driveUrl !== 'string' || driveUrl === 'Not Provided') return null;
+    const match = driveUrl.match(/[-\w]{25,}/);
+    if (!match) return null;
+    const file = DriveApp.getFileById(match[0]);
+    return file.getBlob();
+  } catch (e) {
+    Logger.log("Attachment error: " + e);
+    return null;
+  }
+}
+
+
+function generateFormattedCaseId(type) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Form Responses 1");
+  const ddmmyy = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "ddMMyy");
+
+  const CASE_SHORT_CODES = {
+    "Death": "DE",
+    "Missing Person": "MP",
+    "Absconding": "AB",
+    "Employer Harassment / Abuse": "EH",
+    "Overstay / Illegal Status": "OS",
+    "Hospitalized / Medical Emergency": "HM",
+    "Police Case / Detention": "PC",
+    "Visa Fraud / Fake Agent": "VF",
+    "Unpaid Salary / Labor Exploitation": "US",
+    "Stranded Without Support": "ST",
+    "Request for Exit / Amnesty Case": "EX",
+    "Family Dispute / Marital Issues": "FD",
+    "Mental Health / Behavioral Crisis": "MH",
+    "Suicidal Risk / Trauma": "SR",
+    "Child Welfare / Abandonment": "CW",
+    "Documents Withheld by Employer": "DW",
+    "Repatriation of Dead Body": "RD",
+    "Legal Aid / Court Case Support": "LA",
+    "Job Scam / Absconded Agents": "JS",
+    "Unlisted": "UN"
+  };
+
+  const code = CASE_SHORT_CODES[type] || "XX";
+  const existing = sheet.getRange(2, 99, sheet.getLastRow() - 1).getValues();
+  const todayCount = existing.filter(r => (r[0] || '').includes(ddmmyy)).length + 1;
+  return `TFA-${ddmmyy}-${code}-${String(todayCount).padStart(3, '0')}`;
+}
+
+
+function generateFormattedCaseIdNew(type) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Form Responses 1");
+  const today = new Date();
+  const ymd = Utilities.formatDate(today, Session.getScriptTimeZone(), "yyyyMMdd");
+  const typeSlug = type.trim().toUpperCase().replace(/[^A-Z]/g, "");
+  const existingCases = sheet.getRange(2, 99, sheet.getLastRow() - 1).getValues();
+  const countToday = existingCases.filter(row => (row[0] || '').toString().includes(ymd)).length + 1;
+  const sequence = String(countToday).padStart(3, '0');
+  return `TFA-${ymd}-${typeSlug}-${sequence}`;
+}
+
+
+function buildAdditionalDetailsSection(caseType, values) {
+  const fields = CASE_FIELD_MAP[caseType];
+  if (!fields) return '';
+  let rows = '';
+  for (const [label, index] of Object.entries(fields)) {
+    const value = values[index];
+    if (value && value !== 'Not Provided') {
+      rows += `<tr><td><strong>${label}</strong></td><td>${value}</td></tr>`;
+    }
+  }
+  if (!rows) return '';
+  return `
+    <p style="margin-top: 20px;"><strong>Additional Case Details:</strong></p>
+    <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse; width: 100%; font-size: 13px;">
+      ${rows}
+    </table>`;
+}
