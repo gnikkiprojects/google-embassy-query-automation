@@ -81,6 +81,7 @@ google-embassy-query-automation/
 
 ## 🖼️ Workflow Diagram
 
+```mermaid
 flowchart TD
   A[Community Member Submits Google Form] --> B[Response stored in Google Sheet]
   B --> C[Apps Script Trigger: onFormSubmit(e)]
